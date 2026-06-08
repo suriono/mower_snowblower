@@ -6,6 +6,12 @@ __pycache__/
 # C extensions
 *.so
 
+# password
+password.h
+password.ino
+password.py
+password.json
+
 # Distribution / packaging
 .Python
 build/
