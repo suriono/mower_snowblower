@@ -1,50 +1,31 @@
-import WIFI, math, MQTT, sys, os, json
+import math, MQTT, general
+import mymap
 
 class GPS_class:
    Radius   = 6378137    # Earth radius for a given local geograph(ic location
    rtk, rtk_type, prec = 0, "No Solution", 0.0
+   #map_obj = mymap.MAP_class()
    
-#   def __init__(self, host="192.168.11.201", port=8000,lat_ref=0.0, lon_ref=0.0):
-   def __init__(self):
-      BASE_DIR = self.get_base_dir()
-      with open(os.path.join(self.get_base_dir(),"password.json" ), 'r') as file:
-         self.data_json = json.load(file)
-         print(self.data_json)   
+   def __init__(self, map_event_handler_instance=None):
+      self.map_handler = map_event_handler_instance
 
-      #lf.wifi_obj = WIFI.WIFI_class(host, port)
-#      self.mqtt_obj = MQTT.MQTT_class()
-#      self.lat_ref, self.lon_ref, self.lat, self.lon = lat_ref, lon_ref, lat_ref, lon_ref  # reference GPS for X,Y=0,0
-#      self.X_scale = self.Radius * math.cos(math.radians(self.lat_ref))
+      js = general.get_config()
+      self.ref_lat, self.ref_lon = js["ref_lat"],js["ref_lon"]
+      self.X_scale = self.Radius * math.cos(math.radians(self.ref_lat))
 
    def get_GPS(self):
-      self.wifi_obj.send_Message('{"cmd":"get_gps"}')
-      if self.wifi_obj.listen_Wifi(64):
-         in_json = self.wifi_obj.read_json
-         self.lat, self.lon, self.prec = in_json['lat'], in_json['lon'], in_json['prec']
-         return True
-      return False
-
-   def get_RTK(self):
-      self.wifi_obj.send_Message('{"cmd":"get_rtk"}')
-      if self.wifi_obj.listen_Wifi(16):
-         in_json = self.wifi_obj.read_json
-         self.rtk = in_json['rtk']
-         if self.rtk == 0:
-            self.rtk_type = "No Solution"
-         elif self.rtk == 1:
-            self.rtk_type = "Floating fix"
-         else:
-            self.rtk_type = "High precision fix"
-         return True
-      return False
-
-   def close_Connection(self):
-      self.wifi_obj.close_Connection()
-
+      return self.lat, self.lon, self.prec, self.count
+      
+   def mqtt_to_GPS_event_handler(self, js):
+      self.lat,self.lon,self.prec,self.count = js['lat'],js['lon'],js['prec'],js['count']
+      self.X, self.Y = self.convert_GPS_to_XY(self.lat, self.lon)
+      print(self.lat, self.lon, self.prec, self.count, self.X, self.Y)
+      self.map_handler.gps_to_map_event_handler(X=self.X, Y=self.Y, count=self.count)
+  
    # --------------- Conversion X,Y and Lattitude, Longitude
 
    def convert_GPS_to_XY(self, lat, lon):
-      del_lat, del_lon = lat - self.lat_ref, lon - self.lon_ref
+      del_lat, del_lon = lat - self.ref_lat, lon - self.ref_lon
       del_X = self.X_scale * math.sin(math.radians(del_lon))
       del_Y = self.Radius * math.sin(math.radians(del_lat))
       return del_X, del_Y
@@ -53,27 +34,13 @@ class GPS_class:
       lat = math.degrees(math.asin(y / self.Radius)) + self.lat_ref
       lon = math.degrees(math.asin(x / self.X_scale)) + self.lon_ref
       return lat, lon
-   
-   def get_base_dir(self):
-    if getattr(sys, 'frozen', False):
-        # Running as a PyInstaller EXE
-        return sys._MEIPASS
-    else:
-        # Running as a normal .py script
-        return os.path.dirname(os.path.abspath(__file__))
-
 
 # ==================== Testing ====================
 if __name__ == "__main__":
-#   gps_obj = GPS.GPS_class("192.168.11.201", 8000)
    gps_obj = GPS_class()
+   mqtt_obj = MQTT.MQTT_class(gps_event_handler_instance=gps_obj)
+   mqtt_obj.mqtt_start()
 
-#   for i in range(10):
-#      if gps_obj.get_GPS():
-# in_json = gps_obj.read_json
-#         print(i, gps_obj.lat, gps_obj.lon, gps_obj.prec/10, "mm")
-# lat, lon, prec = in_json['lat'], in_json['lon'], in_json['prec']
-#   if gps_obj.get_RTK():
-#      print("RTK: ", gps_obj.rtk, " type: ", gps_obj.rtk_type)
-
-#   gps_obj.close_Connection()
+   import time
+   for i in range(1, 10):  # 10 seconds to display gps data
+      time.sleep(0.2)  # Pauses the loop for 1.5 seconds

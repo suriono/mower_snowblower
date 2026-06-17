@@ -1,16 +1,23 @@
 import paho.mqtt.client as mqtt
 import paho.mqtt.publish as publish
-import json
+import json,os,sys
 
 class MQTT_class:
 
-    HOST = "192.168.11.122"
-    username, password = "uzinator", ""
+    HOST = "192.168.0.122"
     yaw,lat,lon = 0,0.0,0.0
 
-    def __init__(self):
+    def __init__(self, gps_event_handler_instance):
+        self.gps_handler = gps_event_handler_instance
+    #def __init__(self):
+        self.gps_handler = gps_event_handler_instance
+
+
+        with open(os.path.join(self.get_base_dir(),"password.json" ), 'r') as file:
+            self.data_json = json.load(file)
+
         self.mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-        self.mqtt_client.username_pw_set(username=self.username, password=self.password)
+        self.mqtt_client.username_pw_set(username=self.data_json["MQTT_USER"], password=self.data_json["MQTT_PASSWD"])
         self.mqtt_client.on_connect = self.mqtt_on_connect
         self.mqtt_client.on_disconnect = self.mqtt_on_disconnect
         self.mqtt_client.on_publish = self.mqtt_on_publish
@@ -20,6 +27,9 @@ class MQTT_class:
             sys.exit(1)
         else:
             print("MQTT connection established")
+
+    def mqtt_start(self):
+        self.mqtt_client.loop_start()
 
     def mqtt_on_connect(self, client, userdata, flags, mid, rc):
         print("Connected to MQTT Broker, code: ", str(mid))
@@ -44,12 +54,30 @@ class MQTT_class:
             self.imu_count = val
         elif topic == "mower/gps":
             js = json.loads(val)
-            self.lat,self.lon,self.gps_prec,self.gps_count = js['lat'],js['lon'],js['prec'],js['count']
-           # print("   GPS json:", self.lat, self.lon, self.prec, self.gps_count)
+            print(js)
+            self.lat,self.lon,self.prec,self.count = js['lat'],js['lon'],js['prec'],js['count']
+
+            self.gps_handler.mqtt_to_GPS_event_handler(js)
+
+            #print("GPS:", self.lat, self.lon, self.prec, self.count)
+
+    def get_base_dir(self):
+        if getattr(sys, 'frozen', False):
+            # Running as a PyInstaller EXE
+            return sys._MEIPASS
+        else:
+            # Running as a normal .py script
+            return os.path.dirname(os.path.abspath(__file__))
 
 # ==================== Testing ====================
 if __name__ == "__main__":
-    MQTT_obj = MQTT_class()
+    import mymap, GPS
+    from PySide6.QtWidgets import QApplication, QWidget
+    app = QApplication(sys.argv)
+    map_obj = mymap.MAP_class()
+    gps_obj = GPS.GPS_class(map_event_handler_instance=map_obj)
+    MQTT_obj = MQTT_class(gps_event_handler_instance=gps_obj)
+   # MQTT_obj = MQTT_class()
     #while True:
     #    try:
     #        MQTT_obj.reconnect()
