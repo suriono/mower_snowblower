@@ -1,14 +1,21 @@
 import paho.mqtt.client as mqtt
 import paho.mqtt.publish as publish
-import json,os,sys
+import json,os,sys, multiprocessing
 
-class MQTT_class:
+class MQTT_class(multiprocessing.Process):
 
     HOST = "192.168.0.122"
     yaw,lat,lon = 0,0.0,0.0
 
-    def __init__(self, gps_event_handler_instance):
-        self.gps_handler = gps_event_handler_instance
+    # def __init__(self, gps_event_handler_instance, data_pipe):
+    def __init__(self,  data_pipe):
+        super().__init__()
+     #   self.gps_handler = gps_event_handler_instance
+        self.pipe = data_pipe
+
+        self.mqtt_client = None
+
+    def run(self):
 
         with open(os.path.join(self.get_base_dir(),"password.json" ), 'r') as file:
             self.data_json = json.load(file)
@@ -24,6 +31,7 @@ class MQTT_class:
             sys.exit(1)
         else:
             print("MQTT connection established")
+            self.mqtt_client.loop_forever()
 
     def mqtt_start(self):
         self.mqtt_client.loop_start()
@@ -51,10 +59,12 @@ class MQTT_class:
             self.imu_count = val
         elif topic == "mower/gps":
             js = json.loads(val)
-            print(js)
+            #print(js)
             self.lat,self.lon,self.prec,self.count = js['lat'],js['lon'],js['prec'],js['count']
+            #print(f"=======LAT: {self.lat}")
+            self.pipe.send(js)
 
-            self.gps_handler.mqtt_to_GPS_event_handler(js)
+      #      self.gps_handler.mqtt_to_GPS_event_handler(js)
 
             #print("GPS:", self.lat, self.lon, self.prec, self.count)
 
@@ -68,14 +78,46 @@ class MQTT_class:
 
 # ==================== Testing ====================
 if __name__ == "__main__":
-    import mymap, GPS
+    import mymap, GPS,time 
     from PySide6.QtWidgets import QApplication, QWidget
+
+    main_receiver_pipe, worker_sender_pipe = multiprocessing.Pipe()
+
+
     app = QApplication(sys.argv)
     map_obj = mymap.MAP_class()
     gps_obj = GPS.GPS_class(map_event_handler_instance=map_obj)
-    MQTT_obj = MQTT_class(gps_event_handler_instance=gps_obj)
-   
-    MQTT_obj.mqtt_client.loop_forever()
-#    MQTT_obj.mqtt_client.loop_start()  # or use this
+    #MQTT_obj = MQTT_class(gps_event_handler_instance=gps_obj, data_pipe=worker_sender_pipe)
+    MQTT_obj = MQTT_class(data_pipe=worker_sender_pipe)
+    MQTT_obj.daemon = True
+    MQTT_obj.start()
     print("===== End of MQTT Loop =====")
+
+    try:
+        while True:
+            # Poll the pipe to see if the MQTT class has sent data (1 second timeout)
+            if main_receiver_pipe.poll(timeout=1.0):
+                incoming_data = main_receiver_pipe.recv()
+                
+                print("\n" + "="*50)
+                print(f"[Main Application] SUCCESS! Received packet on Main PID {os.getpid()}:")
+                #print(f" Incoming:", incoming_data)
+                gps_obj.mqtt_to_GPS_event_handler(incoming_data)
+           #     print(f"  • MQTT Topic: {incoming_data['topic']}")
+           #     print(f"  • Message Content: {incoming_data['payload']}")
+           #     print(f"  • Latency delay: {round(time.time() - incoming_data['timestamp'], 4)}s")
+           #     print("="*50 + "\n")
+
+            # Perform other independent heavy tasks here without lagging the network
+            else:
+                time.sleep(1)
+
+    except KeyboardInterrupt:
+        print("\n[Main Application] User interrupted. Stopping child process...")
+        
+        # Gracefully terminate the process core
+        MQTT_obj.terminate()
+        MQTT_obj.join()
+        
+        print("[Main Application] Main program shut down cleanly.")
 
