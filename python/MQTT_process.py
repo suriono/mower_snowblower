@@ -32,6 +32,7 @@ class MQTT_class(multiprocessing.Process):
         else:
             print("MQTT connection established")
             self.mqtt_client.loop_forever()
+            #self.mqtt_client.loop_start()
 
     def mqtt_start(self):
         self.mqtt_client.loop_start()
@@ -60,7 +61,7 @@ class MQTT_class(multiprocessing.Process):
         elif topic == "mower/gps":
             js = json.loads(val)
             #print(js)
-            self.lat,self.lon,self.prec,self.count = js['lat'],js['lon'],js['prec'],js['count']
+            #self.lat,self.lon,self.prec,self.count = js['lat'],js['lon'],js['prec'],js['count']
             #print(f"=======LAT: {self.lat}")
             self.pipe.send(js)
 
@@ -102,7 +103,8 @@ if __name__ == "__main__":
                 print("\n" + "="*50)
                 print(f"[Main Application] SUCCESS! Received packet on Main PID {os.getpid()}:")
                 #print(f" Incoming:", incoming_data)
-                gps_obj.mqtt_to_GPS_event_handler(incoming_data)
+                if "lat" in incoming_data: # if GPS data
+                    gps_obj.mqtt_to_GPS_event_handler(incoming_data)
            #     print(f"  • MQTT Topic: {incoming_data['topic']}")
            #     print(f"  • Message Content: {incoming_data['payload']}")
            #     print(f"  • Latency delay: {round(time.time() - incoming_data['timestamp'], 4)}s")
