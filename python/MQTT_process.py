@@ -15,7 +15,7 @@ class MQTT_class(multiprocessing.Process):
 
         self.mqtt_client = None
 
-    def run(self):
+    def run(self):    # inherited from multiprocessing.Process, when start() is called, this method is executed in a new process
 
         with open(os.path.join(self.get_base_dir(),"password.json" ), 'r') as file:
             self.data_json = json.load(file)
@@ -34,7 +34,7 @@ class MQTT_class(multiprocessing.Process):
             self.mqtt_client.loop_forever()
             #self.mqtt_client.loop_start()
 
-    def mqtt_start(self):
+    def mqtt_start(self):    # only used for multithreading, not multiprocessing, it's no longer needed since we are using multiprocessing.Process and the run() method is automatically called when start() is invoked
         self.mqtt_client.loop_start()
 
     def mqtt_on_connect(self, client, userdata, flags, mid, rc):
@@ -80,7 +80,7 @@ class MQTT_class(multiprocessing.Process):
 # ==================== Testing ====================
 if __name__ == "__main__":
     import mymap, GPS,time 
-    from PySide6.QtWidgets import QApplication, QWidget
+    from PySide6.QtWidgets import QApplication
 
     main_receiver_pipe, worker_sender_pipe = multiprocessing.Pipe()
 
@@ -89,9 +89,9 @@ if __name__ == "__main__":
     map_obj = mymap.MAP_class()
     gps_obj = GPS.GPS_class(map_event_handler_instance=map_obj)
     #MQTT_obj = MQTT_class(gps_event_handler_instance=gps_obj, data_pipe=worker_sender_pipe)
-    MQTT_obj = MQTT_class(data_pipe=worker_sender_pipe)
-    MQTT_obj.daemon = True
-    MQTT_obj.start()
+    mqtt_obj = MQTT_class(data_pipe=worker_sender_pipe)
+    mqtt_obj.daemon = True
+    mqtt_obj.start()
     print("===== End of MQTT Loop =====")
 
     try:
@@ -118,8 +118,8 @@ if __name__ == "__main__":
         print("\n[Main Application] User interrupted. Stopping child process...")
         
         # Gracefully terminate the process core
-        MQTT_obj.terminate()
-        MQTT_obj.join()
+        mqtt_obj.terminate()
+        mqtt_obj.join()
         
         print("[Main Application] Main program shut down cleanly.")
 

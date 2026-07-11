@@ -1,7 +1,7 @@
 import os,sys,time,multiprocessing
 from PySide6.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout, QFileDialog
 from PySide6.QtGui import QPainter, QPixmap
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint
 import mymap, GPS, MQTT_process
 
 class MainWindow(QWidget):
@@ -26,7 +26,11 @@ class MainWindow(QWidget):
         self.button.clicked.connect(self.run_GPS)
 
         #self.mqtt_obj.mqtt_start()
-        self.mqtt_obj.start()
+        self.mqtt_obj.start()    # inherited from multiprocessing.Process, starts the process and calls run() method
+
+        self.map_obj.drawCircle(QPoint(150, 150), 200)  # Draw a circle with center at (150, 150) and radius 200
+
+    # ==================== Run GPS in a separate process ====================
 
     def run_GPS(self):
         try:
@@ -53,10 +57,13 @@ class MainWindow(QWidget):
             print("[Main Application] Main program shut down cleanly.")
             sys.exit(self.activateWindow)
 
+    # ==================== Load JPG Image ====================
 
     def open_file(self):
         path, _ = QFileDialog.getOpenFileName(self,"Select JPG","","Images (*.jpg *.jpeg *.png)")
         if path: self.canvas.load_image(path)
+
+# ==================== Main Application example ====================
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

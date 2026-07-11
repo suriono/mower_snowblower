@@ -37,10 +37,47 @@ class GPS_class:
 
 # ==================== Testing ====================
 if __name__ == "__main__":
-   gps_obj = GPS_class()
-   mqtt_obj = MQTT.MQTT_class(gps_event_handler_instance=gps_obj)
-   mqtt_obj.mqtt_start()
+   from PySide6.QtWidgets import QApplication
+   import multiprocessing, time,sys, os
+   import MQTT_process
 
-   import time
-   for i in range(1, 10):  # 10 seconds to display gps data
-      time.sleep(0.2)  # Pauses the loop for 1.5 seconds
+   main_receiver_pipe, worker_sender_pipe = multiprocessing.Pipe()
+
+   app = QApplication(sys.argv)
+   map_obj = mymap.MAP_class()
+   gps_obj = GPS_class(map_event_handler_instance=map_obj)
+   mqtt_obj = MQTT_process.MQTT_class(data_pipe=worker_sender_pipe)
+   mqtt_obj.daemon = True
+   mqtt_obj.start()
+   print("===== End of MQTT Loop =====")
+
+   try:
+      while True:
+         # Poll the pipe to see if the MQTT class has sent data (1 second timeout)
+         if main_receiver_pipe.poll(timeout=1.0):
+            incoming_data = main_receiver_pipe.recv()
+                
+            print("\n" + "="*50)
+            print(f"[Main Application] SUCCESS! Received packet on Main PID {os.getpid()}:")
+            #print(f" Incoming:", incoming_data)
+            if "lat" in incoming_data: # if GPS data
+               gps_obj.mqtt_to_GPS_event_handler(incoming_data)
+           #     print(f"  • MQTT Topic: {incoming_data['topic']}")
+           #     print(f"  • Message Content: {incoming_data['payload']}")
+           #     print(f"  • Latency delay: {round(time.time() - incoming_data['timestamp'], 4)}s")
+           #     print("="*50 + "\n")
+
+            # Perform other independent heavy tasks here without lagging the network
+            else:
+               time.sleep(1)
+
+   except KeyboardInterrupt:
+      print("\n[Main Application] User interrupted. Stopping child process...")
+        
+      # Gracefully terminate the process core
+      mqtt_obj.terminate()
+      mqtt_obj.join()
+        
+      print("[Main Application] Main program shut down cleanly.")
+
+
