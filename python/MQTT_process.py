@@ -54,10 +54,13 @@ class MQTT_class(multiprocessing.Process):
     def mqtt_on_message(self, client, userdata, msg):
         topic, val = msg.topic,msg.payload.decode("utf-8")
         #print("Received message on MQTT Broker:", msg.topic, msg.payload.decode("utf-8"))
-        if topic == "mower/imu/yaw":
-            self.yaw = int(msg.payload.decode("utf-8"))
-        elif topic == "mower/imu/count":
-            self.imu_count = val
+        if topic == "mower/imu":
+            js = json.loads(val)
+            self.pipe.send(js)
+            #print(f"MQTT: Received IMU data: {js}")
+         #   self.yaw = int(msg.payload.decode("utf-8"))
+        #elif topic == "mower/imu/count":
+        #    self.imu_count = val
         elif topic == "mower/gps":
             js = json.loads(val)
             #print(js)
@@ -100,9 +103,9 @@ if __name__ == "__main__":
             if main_receiver_pipe.poll(timeout=1.0):
                 incoming_data = main_receiver_pipe.recv()
                 
-                print("\n" + "="*50)
-                print(f"[Main Application] SUCCESS! Received packet on Main PID {os.getpid()}:")
-                #print(f" Incoming:", incoming_data)
+               # print("\n" + "="*50)
+               # print(f"[Main Application] SUCCESS! Received packet on Main PID {os.getpid()}:")
+                print(f" Incoming:", incoming_data)
                 if "lat" in incoming_data: # if GPS data
                     gps_obj.mqtt_to_GPS_event_handler(incoming_data)
            #     print(f"  • MQTT Topic: {incoming_data['topic']}")
