@@ -1,8 +1,9 @@
-import os,sys,time,multiprocessing
+import sys,time,multiprocessing,pandas
+from math import radians
 from PySide6.QtWidgets import QApplication, QWidget, QPushButton, QVBoxLayout, QFileDialog
 from PySide6.QtGui import QPainter, QPixmap
 from PySide6.QtCore import QTimer, Qt
-import mymap, GPS, MQTT_process
+import mymap, MQTT_process
 
 class MainWindow(QWidget):
  
@@ -17,13 +18,12 @@ class MainWindow(QWidget):
         
         #self.mqtt_obj = MQTT_process.MQTT_class(gps_event_handler_instance=self.gps_obj)
         
-        self.button = QPushButton("START NAVIGATION")
-
         layout = QVBoxLayout(self)
         layout.addWidget(self.map_obj)
-        layout.addWidget(self.button)
 
-        self.button.clicked.connect(self.run_GPS)
+        self.button = QPushButton("Open Waypoints CSV")
+        layout.addWidget(self.button)
+        self.button.clicked.connect(self.open_file)
 
         #self.mqtt_obj.mqtt_start()
         self.mqtt_obj.start()    # inherited from multiprocessing.Process, starts the process and calls run() method
@@ -31,99 +31,101 @@ class MainWindow(QWidget):
         # Timer
         self.timer_counter = 0
         self.timer = QTimer(self)
-        self.timer.setInterval(1000)  # 1000 ms = 1 second
+        self.timer.setInterval(2)  # 1000 ms = 1 second
         self.timer.timeout.connect(self.mqtt_refresh)
         self.timer.start()
        # self.map_obj.show_location_by_XY(-41.431204117985764, 39.876088755091494)  # Example coordinates
 
-        try:
-            while True:
-                # Poll the pipe to see if the MQTT class has sent data (1 second timeout)
-                if self.mqtt_receiver_pipe.poll(timeout=1.0):
-                    incoming_data = self.mqtt_receiver_pipe.recv()
-                    print(f" Incoming:", incoming_data)
-                   # if "lat" in incoming_data: # if GPS data
-                   #     self.gps_obj.mqtt_to_GPS_event_handler(incoming_data)
-               #     print(f"  • MQTT Topic: {incoming_data['topic']}")
-               #     print(f"  • Message Content: {incoming_data['payload']}")
-               #     print(f"  • Latency delay: {round(time.time() - incoming_data['timestamp'], 4)}s")
-               #     print("="*50 + "\n")
-
-            # Perform other independent heavy tasks here without lagging the network
-                else:
-                    time.sleep(1)
-
-        except KeyboardInterrupt:
-            print("\n[Main Application] User interrupted. Stopping child process...")
+        # try:
+        #     while True:
+        #         # Poll the pipe to see if the MQTT class has sent data (1 second timeout)
+        #         if self.mqtt_receiver_pipe.poll(timeout=1.0):
+        #             incoming_data = self.mqtt_receiver_pipe.recv()
+        #             print(f" Incoming:", incoming_data)
+        #         else:
+        #             time.sleep(1)
+        # except KeyboardInterrupt:
+        #     print("\n[Main Application] User interrupted. Stopping child process...")
+        #     self.mqtt_obj.terminate()  # Gracefully terminate the process core
+        #     self.mqtt_obj.join()
         
-            # Gracefully terminate the process core
-            self.mqtt_obj.terminate()
-            self.mqtt_obj.join()
-        
-            print("[Main Application] Main program shut down cleanly.")
+        #     print("[Main Application] Main program shut down cleanly.")
 
     def mqtt_refresh(self):
+        
         if self.mqtt_receiver_pipe.poll(timeout=0.5):  # Non-blocking check for new data
             js = self.mqtt_receiver_pipe.recv()  # Receive the JSON data from the pipe
-           # print("\n" + "="*50)
-           # print(f"[Main Application] SUCCESS! Received packet on Main PID {os.getpid()}:")
+        #    # print(f"[Main Application] SUCCESS! Received packet on Main PID {os.getpid()}:")
+            self.timer_counter += 1
             if "lat" in js:  # Check if GPS data is present
                 lat, lon = js["lat"], js["lon"]
+                self.map_obj.lat, self.map_obj.lon = lat, lon  # Update the map object's lat and lon
                 X, Y = self.map_obj.GPS_to_XY(lat, lon)
                 print(f"=============Processed GPS JSON: lat={lat}, lon={lon}, X={X}, Y={Y}")
-                self.timer_counter += 1
-                if self.timer_counter % 2 == 1:  # Every 10th update
+                if self.timer_counter % 40 == 1:  # Every 10th update
                     self.map_obj.show_location_by_XY(X, Y)
             elif "Yaw" in js:          # if IMU data
-                #yaw = js["Yaw"]
-                print(f"=============Processed Yaw Json:  {js}")
+                yaw,yaw_count = float(js["Yaw"]),int(js["count"])
+                self.map_obj.radian = radians(yaw)
+                if yaw_count % 10 == 1:  # Every 10th update
+                  #  print(f"=============Processed Yaw Json:  {js}")
+                    self.map_obj.show_location()
+
 
     # ==================== Run GPS in a separate process ====================
 
-    def run_GPS(self):
-        try:
-            while True:
-                # Poll the pipe to see if the MQTT class has sent data (1 second timeout)
-                if self.mqtt_receiver_pipe.poll(timeout=1.0):
-                    js = self.mqtt_receiver_pipe.recv()   # incoming data in JSON format
+    # def run_GPS(self):
+    #     try:
+    #         while True:
+    #             # Poll the pipe to see if the MQTT class has sent data (1 second timeout)
+    #             if self.mqtt_receiver_pipe.poll(timeout=1.0):
+    #                 js = self.mqtt_receiver_pipe.recv()   # incoming data in JSON format
                 
-                  #  print("\n" + "="*50)
-                  #  print(f"[Main Application] SUCCESS! Received packet on Main PID {os.getpid()}:")
-                    #print(f" Incoming:", incoming_data)
-                    if "lat" in js: # if GPS data
-                        lat, lon = js["lat"], js["lon"]
-                        X, Y = self.map_obj.GPS_to_XY(lat, lon)
-                        print(f"=============Processed JSON: lat={lat}, lon={lon}, X={X}, Y={Y}")
-                        self.map_obj.show_location_by_XY(X, Y)
-                        return
-                    elif "Yaw" in js: # if GPS data
-                        yaw = js["Yaw"]
-                        #X, Y = self.map_obj.GPS_to_XY(lat, lon)
-                        print(f"=============Processed JSON: lat={yaw}")
-                       # self.map_obj.show_location_by_XY(X, Y)
-                        return
-                        
-                        #self.map_obj.update()
-                        #self.map_obj.json_processor(incoming_data)
-                       # self.gps_obj.mqtt_to_GPS_event_handler(incoming_data)
-                else:
-                    time.sleep(0.1)
+    #                 if "lat" in js: # if GPS data
+    #                     lat, lon = js["lat"], js["lon"]
+    #                     X, Y = self.map_obj.GPS_to_XY(lat, lon)
+    #                     print(f"=============Processed JSON: lat={lat}, lon={lon}, X={X}, Y={Y}")
+    #                     self.map_obj.show_location_by_XY(X, Y)
+    #                     return
+    #                 elif "Yaw" in js: # if GPS data
+    #                     yaw = js["Yaw"]
+    #                     #X, Y = self.map_obj.GPS_to_XY(lat, lon)
+    #                     #print(f"=============Processed JSON: lat={yaw}")
+    #                    # self.map_obj.show_location_by_XY(X, Y)
+    #                     return
+    #             else:
+    #                 time.sleep(0.1)
 
-        except KeyboardInterrupt:
-            print("\n[Main Application] User interrupted. Stopping child process...")
+    #     except KeyboardInterrupt:
+    #         print("\n[Main Application] User interrupted. Stopping child process...")
         
-            # Gracefully terminate the process core
-            self.mqtt_obj.terminate()
-            self.mqtt_obj.join()
+    #         # Gracefully terminate the process core
+    #         self.mqtt_obj.terminate()
+    #         self.mqtt_obj.join()
         
-            print("[Main Application] Main program shut down cleanly.")
-            sys.exit(self.activateWindow)
+    #         print("[Main Application] Main program shut down cleanly.")
+    #         sys.exit(self.activateWindow)
 
     # ==================== Load JPG Image ====================
 
     def open_file(self):
-        path, _ = QFileDialog.getOpenFileName(self,"Select JPG","","Images (*.jpg *.jpeg *.png)")
-        if path: self.canvas.load_image(path)
+        path, _ = QFileDialog.getOpenFileName(self,"Select CSV","","CSV Files (*.csv);;All Files (*) ")
+        if path:
+            df = pandas.read_csv(path)
+            print(f"Loaded waypoints from CSV: {df.shape[0]} rows, {df.shape[1]} columns\n{df.head()}") 
+            Xs, Ys = [],[]
+            for row in df.itertuples():
+                X, Y = self.map_obj.GPS_to_XY(row.LAT, row.LON)
+                Xs.append(X)
+                Ys.append(Y)
+            df['X'], df['Y'] = Xs, Ys
+            print(f" new df with X,Y:\n{df.head()}") 
+            self.map_obj.set_waypoints(df)
+
+           
+                #else:
+                #    print(f"Row skipped (not enough data): {row}")
+            #self.canvas.load_image(path)
 
 # ==================== Main Application example ====================
 
@@ -133,6 +135,8 @@ if __name__ == "__main__":
     window.setWindowTitle("PySide6 Canvas + Button + JPG")
     window.resize(600, 500)
     window.show()
+
+   
 
     #for i in range(1, 10):
     #    if window.gps_obj.get_GPS():

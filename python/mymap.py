@@ -6,7 +6,8 @@ from PySide6.QtCore import Qt, QPoint
 class MAP_class(QWidget):
     Radius   = 6378137         # Earth radius for a given local geographic location, adjust as needed
     Xpix, Ypix, theta = 0,0,0
-
+    lat, lon = 0.0, 0.0
+    df_waypoints = None
 
     def __init__(self, parent=None):
         js = general.get_config()
@@ -14,7 +15,6 @@ class MAP_class(QWidget):
         self.img_width,self.img_height = js["img_width"],js["img_height"]
         self.ref_lat, self.ref_lon = js["ref_lat"],js["ref_lon"]
         self.X_scale = self.Radius * math.cos(math.radians(self.ref_lat))
-
 
         self.radian = 1
 
@@ -53,6 +53,12 @@ class MAP_class(QWidget):
         del_Y = self.Radius * math.sin(math.radians(del_lat))
         return del_X, del_Y
     
+    # --------------- Show Location when self.lat and self.lon are set ----------------
+    
+    def show_location(self):
+        x, y = self.GPS_to_XY(self.lat, self.lon)
+        self.show_location_by_XY(x, y)
+    
     # --------------- Show Location by X,Y on the Map -----------------------------
     
     def show_location_by_XY(self, X, Y):
@@ -66,6 +72,18 @@ class MAP_class(QWidget):
     def show_location_by_GPS(self, lat, lon):
         X, Y = self.GPS_to_XY(lat, lon)
         self.show_location_by_XY(X, Y)
+
+    # --------------- Show Waypoints ---------------------------------------------
+
+    def set_waypoints(self, df):
+        self.df_waypoints = df
+        self.is_waypoints_changed = True
+        #for index, row in df.iterrows():
+        #    X, Y = row['X'], row['Y']
+        #    Xpix, Ypix = self.XY_to_Pixel(X, Y)
+       #     self.drawCircle(QPoint(Xpix, Ypix), 30)  # Draw a small circle for each waypoint
+       #     print(f"Waypoint {index}: X={X}, Y={Y}, Pixel=({Xpix},{Ypix})")
+       # self.update()  # Trigger a repaint to show the waypoints
 
     # --------------- Paint Event --------------------------------------------------
 
@@ -92,17 +110,29 @@ class MAP_class(QWidget):
             painter.drawLine(self.arrow_start, self.arrow_end)
             painter.drawLine(self.arrow_tip1, self.arrow_end)
             painter.drawLine(self.arrow_tip2, self.arrow_end)
+        if self.df_waypoints is not None:
+            pen = QPen(Qt.blue, 4)
+            painter.setPen(pen)
+            for index, row in self.df_waypoints.iterrows():
+                X, Y = row['X'], row['Y']
+                Xpix, Ypix = self.XY_to_Pixel(X, Y)
+                painter.drawEllipse(QPoint(Xpix, Ypix), 10, 10)  # Draw a small circle for each waypoint
+                if index > 0:
+                    prev_X, prev_Y = self.df_waypoints.iloc[index - 1]['X'], self.df_waypoints.iloc[index - 1]['Y']
+                    prev_Xpix, prev_Ypix = self.XY_to_Pixel(prev_X, prev_Y)
+                    painter.drawLine(QPoint(prev_Xpix, prev_Ypix), QPoint(Xpix, Ypix))
+           # self.is_waypoints_changed = False
 
     # ==================== Draw Circle Method ====================
 
     def drawCircle(self, center: QPoint, radius: int):
-        print("Drawing circle at", center, "with radius", radius)
+       # print("Drawing circle at", center, "with radius", radius)
         self.circle_center = center
         self.circle_radius = radius
        # self.update()   # calls paintEvent()
 
     def drawArrow(self, start: QPoint, end: QPoint):
-        print("Drawing arrow from", start, "to", end)
+        #print("Drawing arrow from", start, "to", end)
         arrow_length = self.img_width / 5
         self.arrow_start = start
         x2 = int( self.arrow_length * math.sin(self.radian) + start.x()) 
