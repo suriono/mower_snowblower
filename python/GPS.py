@@ -19,7 +19,8 @@ class GPS_class:
    def mqtt_to_GPS_event_handler(self, js):
       self.lat,self.lon,self.prec,self.count = js['lat'],js['lon'],js['prec'],js['count']
       self.X, self.Y = self.convert_GPS_to_XY(self.lat, self.lon)
-      print(self.lat, self.lon, self.prec, self.count, self.X, self.Y)
+      print(f"GPS info: {self.lat}, {self.lon}, {self.prec}, {self.count}, {self.X}, {self.Y}")
+      #self.map_handler.show_location_by_XY(self.X, self.Y)
       self.map_handler.gps_to_map_event_handler(X=self.X, Y=self.Y, count=self.count)
   
    # --------------- Conversion X,Y and Lattitude, Longitude
