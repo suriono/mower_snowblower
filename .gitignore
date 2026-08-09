@@ -225,3 +225,6 @@ __marimo__/
 
 # backup files
 *.bak*
+
+# omit certain CSV
+waypoints.csv

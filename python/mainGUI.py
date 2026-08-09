@@ -8,6 +8,7 @@ import mymap, MQTT_process, light_indicator
 class MainWindow(QWidget):
 
     gps_counter, gps_lasttime = 0, time.time()
+    imu_counter, imu_lasttime = 0, time.time()
     timer_counter = 0
 
 
@@ -23,25 +24,36 @@ class MainWindow(QWidget):
         
        # layout = QVBoxLayout(self)
         layout = QGridLayout(self)
-        layout.addWidget(self.map_obj, 0, 0, 2, 1)
 
-        self.button = QPushButton("Open Waypoints CSV")
-        self.button.clicked.connect(self.open_file)
+        self.button_waypoints_csv = QPushButton("Open Waypoints CSV")
+        self.button_waypoints_csv.clicked.connect(self.open_file)
+        self.button_run_mission = QPushButton("Run Mission")
+        self.button_run_mission.clicked.connect(self.run_mission)
 
         self.gps_light_indicator = light_indicator.LightIndicator(text="GPS Status", size=30)
+        self.imu_light_indicator = light_indicator.LightIndicator(text="IMU Status", size=30)
 
+        layout.addWidget(self.map_obj, 0, 0, 4, 1)
         layout.addWidget(self.gps_light_indicator, 0, 1, alignment=Qt.AlignTop)
-        layout.addWidget(self.button, 1, 1)
+        layout.addWidget(self.imu_light_indicator, 1, 1, alignment=Qt.AlignTop)
+        layout.addWidget(self.button_waypoints_csv, 2, 1)
+        layout.addWidget(self.button_run_mission, 3, 1)
 
+        self.map_timer = QTimer(self)
+        self.map_timer.setInterval(100)  # 100 ms = 0.1
+        self.map_timer.timeout.connect(self.map_obj.show_location)  # Update the map display every 100 ms
+        self.map_timer.start()
 
-        self.mqtt_obj.start()    # inherited from multiprocessing.Process, starts the process and calls run() method
+        # self.mqtt_obj.start()    # inherited from multiprocessing.Process, starts the process and calls run() method
 
-        # Timer
-        self.timer = QTimer(self)
-        self.timer.setInterval(2)  # 1000 ms = 1 second
-        self.timer.timeout.connect(self.mqtt_refresh)
-        self.timer.start()
+        self.mqtt_timer = QTimer(self)
+        self.mqtt_timer.setInterval(2)  # 1000 ms = 1 second
+        self.mqtt_timer.timeout.connect(self.mqtt_refresh)
+        # self.mqtt_timer.start()
 
+    # ========================== Map Refresh ====================
+
+    #
     # ========================== MQTT Refresh ====================
 
     def mqtt_refresh(self):
@@ -51,23 +63,20 @@ class MainWindow(QWidget):
         #    # print(f"[Main Application] SUCCESS! Received packet on Main PID {os.getpid()}:")
             self.timer_counter += 1
             if "lat" in js:  # Check if GPS data is present
-                lat, lon, count = js["lat"], js["lon"], js["count"]
-                if count != self.gps_counter:
-                    self.gps_counter = count
+                lat, lon, gps_count = js["lat"], js["lon"], js["count"]
+                self.map_obj.lat, self.map_obj.lon = lat, lon  # Update the map object's lat and lon
+                if gps_count != self.gps_counter:
+                    self.gps_counter = gps_count
                     self.gps_lasttime = time.time()
 
-                self.map_obj.lat, self.map_obj.lon = lat, lon  # Update the map object's lat and lon
-               # X, Y = self.map_obj.GPS_to_XY(lat, lon)
-              #  print(f"=============Processed GPS JSON: lat={lat}, lon={lon}, X={X}, Y={Y}")
-                #print(f" =============Processed GPS JSON: {js}")
-               # if self.timer_counter % 40 == 1:  # Every 10th update
-               #     self.map_obj.show_location_by_XY(X, Y)
+             
             elif "Yaw" in js:          # if IMU data
                 yaw,yaw_count = float(js["Yaw"]),int(js["count"])
                 self.map_obj.radian = radians(yaw)
-              #  if yaw_count % 10 == 1:  # Every 10th update
-                  #  print(f"=============Processed Yaw Json:  {js}")
-               #     self.map_obj.show_location()
+                if yaw_count != self.imu_counter:
+                    self.imu_counter = yaw_count
+                    self.imu_lasttime = time.time()
+              
             if self.timer_counter % 20 == 1:  # only display every 20 x 2 ms = 40 ms interval
                 self.gps_light_indicator.set_green() if time.time() - self.gps_lasttime < 0.1 else self.gps_light_indicator.set_red()
                 self.map_obj.show_location()  # Update the map display every 10th update
@@ -98,6 +107,13 @@ class MainWindow(QWidget):
                 #else:
                 #    print(f"Row skipped (not enough data): {row}")
             #self.canvas.load_image(path)
+
+    # ==================== Run Mission ====================
+
+    def run_mission(self):
+        print("Running mission...")
+        self.mqtt_obj.start()    # inherited from multiprocessing.Process, starts the process and calls run() method
+        self.mqtt_timer.start()
 
 # ==================== Main Application example ====================
 
