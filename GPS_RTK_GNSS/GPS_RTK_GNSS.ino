@@ -27,6 +27,7 @@ int32_t latitude, longitude, accuracy;
 int8_t latitudeHp, longitudeHp;
 double d_lat, d_lon;
 float f_accuracy;
+byte fixType;
 
 // ========================================= SET UP ==================================
 

@@ -6,8 +6,8 @@ from PySide6.QtCore import Qt, QPoint
 class MAP_class(QWidget):
     Radius   = 6378137         # Earth radius for a given local geographic location, adjust as needed
     Xpix, Ypix, theta = 0,0,0
-    lat, lon = 0.0, 0.0
-    df_waypoints = None
+    lat, lon, prec,fix = 0.0, 0.0, 1000.0,0
+    df_waypoints, waypoint_count = None, 0
 
     def __init__(self, parent=None):
         js = general.get_config()
@@ -16,7 +16,7 @@ class MAP_class(QWidget):
         self.ref_lat, self.ref_lon = js["ref_lat"],js["ref_lon"]
         self.X_scale = self.Radius * math.cos(math.radians(self.ref_lat))
 
-        self.radian = 1
+        self.radian = 1    # default orientation in radians, can be updated based on IMU data
 
         super().__init__(parent)
         image_path = general.get_map_path()
@@ -78,12 +78,12 @@ class MAP_class(QWidget):
     def set_waypoints(self, df):
         self.df_waypoints = df
         self.is_waypoints_changed = True
-        #for index, row in df.iterrows():
-        #    X, Y = row['X'], row['Y']
-        #    Xpix, Ypix = self.XY_to_Pixel(X, Y)
-       #     self.drawCircle(QPoint(Xpix, Ypix), 30)  # Draw a small circle for each waypoint
-       #     print(f"Waypoint {index}: X={X}, Y={Y}, Pixel=({Xpix},{Ypix})")
-       # self.update()  # Trigger a repaint to show the waypoints
+        self.waypoint_count = 0
+
+    # --------------- set Way Path ----------------------------------------------
+
+    def set_way_path(self):
+        print(f"Setting way path with {self.df_waypoints.shape[0]} waypoints.")
 
     # --------------- Paint Event --------------------------------------------------
 

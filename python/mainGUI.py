@@ -27,17 +27,20 @@ class MainWindow(QWidget):
 
         self.button_waypoints_csv = QPushButton("Open Waypoints CSV")
         self.button_waypoints_csv.clicked.connect(self.open_file)
+        self.button_simulate = QPushButton("Simulate")
+        self.button_simulate.clicked.connect(self.simulate_mission)
         self.button_run_mission = QPushButton("Run Mission")
         self.button_run_mission.clicked.connect(self.run_mission)
 
         self.gps_light_indicator = light_indicator.LightIndicator(text="GPS Status", size=30)
         self.imu_light_indicator = light_indicator.LightIndicator(text="IMU Status", size=30)
 
-        layout.addWidget(self.map_obj, 0, 0, 4, 1)
-        layout.addWidget(self.gps_light_indicator, 0, 1, alignment=Qt.AlignTop)
-        layout.addWidget(self.imu_light_indicator, 1, 1, alignment=Qt.AlignTop)
-        layout.addWidget(self.button_waypoints_csv, 2, 1)
-        layout.addWidget(self.button_run_mission, 3, 1)
+        layout.addWidget(self.map_obj, 0, 0, 5, 1)
+        layout.addWidget(self.button_waypoints_csv, 0, 1)
+        layout.addWidget(self.gps_light_indicator, 1, 1, alignment=Qt.AlignTop)
+        layout.addWidget(self.button_simulate, 2, 1)
+        layout.addWidget(self.imu_light_indicator, 3, 1, alignment=Qt.AlignTop)
+        layout.addWidget(self.button_run_mission, 4, 1)
 
         self.map_timer = QTimer(self)
         self.map_timer.setInterval(100)  # 100 ms = 0.1
@@ -63,12 +66,12 @@ class MainWindow(QWidget):
         #    # print(f"[Main Application] SUCCESS! Received packet on Main PID {os.getpid()}:")
             self.timer_counter += 1
             if "lat" in js:  # Check if GPS data is present
-                lat, lon, gps_count = js["lat"], js["lon"], js["count"]
-                self.map_obj.lat, self.map_obj.lon = lat, lon  # Update the map object's lat and lon
+                #print(f" js: {js}")
+                lat, lon, gps_count, prec, fix = js["lat"], js["lon"], js["count"], js["prec"], js["fix"]
+                self.map_obj.lat, self.map_obj.lon, self.map_obj.prec, self.map_obj.fix = lat, lon, prec, fix  # Update the map object's lat, lon, and precision
                 if gps_count != self.gps_counter:
                     self.gps_counter = gps_count
                     self.gps_lasttime = time.time()
-
              
             elif "Yaw" in js:          # if IMU data
                 yaw,yaw_count = float(js["Yaw"]),int(js["count"])
@@ -77,9 +80,11 @@ class MainWindow(QWidget):
                     self.imu_counter = yaw_count
                     self.imu_lasttime = time.time()
               
-            if self.timer_counter % 20 == 1:  # only display every 20 x 2 ms = 40 ms interval
-                self.gps_light_indicator.set_green() if time.time() - self.gps_lasttime < 0.1 else self.gps_light_indicator.set_red()
+            if self.timer_counter % 50 == 1:  # only display every 20 x 2 ms = 40 ms interval
+                self.gps_light_indicator.set_green() if time.time() - self.gps_lasttime < 0.3 else self.gps_light_indicator.set_red()
+                self.gps_light_indicator.label.setText(f"GPS Count: {self.gps_counter}\nPrec: {self.map_obj.prec/100:.1f} cm, Fix: {self.map_obj.fix}")
                 self.map_obj.show_location()  # Update the map display every 10th update
+                print(f" GPS elapsed time: {time.time() - self.gps_lasttime:.2f} seconds")
 
         gps_elapsed_time = time.time() - self.gps_lasttime
 
@@ -94,20 +99,24 @@ class MainWindow(QWidget):
         if path:
             df = pandas.read_csv(path)
             print(f"Loaded waypoints from CSV: {df.shape[0]} rows, {df.shape[1]} columns\n{df.head()}") 
-            Xs, Ys = [],[]
+            Lats,Lons,Xs, Ys = [],[],[],[]
             for row in df.itertuples():
                 X, Y = self.map_obj.GPS_to_XY(row.LAT, row.LON)
+                Lats.append(row.LAT)
+                Lons.append(row.LON)
                 Xs.append(X)
                 Ys.append(Y)
-            df['X'], df['Y'] = Xs, Ys
+            df['X'], df['Y'], df['LAT'], df['LON'] = Xs, Ys, Lats, Lons
             print(f" new df with X,Y:\n{df.head()}") 
             self.map_obj.set_waypoints(df)
 
-           
-                #else:
-                #    print(f"Row skipped (not enough data): {row}")
-            #self.canvas.load_image(path)
+    # ==================== Simulate Mission ====================
 
+    def simulate_mission(self):
+        print("Simulating mission...") 
+        self.map_obj.lat, self.map_obj.lon = self.map_obj.df_waypoints.iloc[0]['LAT']-0.00015, self.map_obj.df_waypoints.iloc[0]['LON'] + 0.0003
+        print(f" Radian: {self.map_obj.radian}, Xpix: {self.map_obj.Xpix}, Ypix: {self.map_obj.Ypix}")
+        
     # ==================== Run Mission ====================
 
     def run_mission(self):

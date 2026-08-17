@@ -6,6 +6,7 @@ void get_Coordinates() {
     //longitude = myGNSS.getHighResLongitude();
     //longitudeHp = myGNSS.getHighResLongitudeHp();
     accuracy = myGNSS.getHorizontalAccuracy();
+    fixType = myGNSS.getFixType();
     //int32_t ellipsoid = myGNSS.getElipsoid();
     //int8_t ellipsoidHp = myGNSS.getElipsoidHp();
     //int32_t msl = myGNSS.getMeanSeaLevel();

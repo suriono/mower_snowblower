@@ -27,7 +27,7 @@ void onConnectionEstablished()
 
 void MQTT_publish() {
   static unsigned long count_publish=0;
-  mqttstr = "{\"lat\":" + String(d_lat,9) + ",\"lon\":" + String(d_lon,9) + ",\"prec\":" + String(accuracy) + ",\"count\":" + String(count_publish++) + "}";
+  mqttstr = "{\"lat\":" + String(d_lat,9) + ",\"lon\":" + String(d_lon,9) + ",\"prec\":" + String(accuracy) + ",\"fix\":" + String(fixType) + ",\"count\":" + String(count_publish++) + "}";
   mqtt_client.publish(MQTT_TOPIC_GPS  , mqttstr, true); 
  // Serial.println(mqttstr);
 }
